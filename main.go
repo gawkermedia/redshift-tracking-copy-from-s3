@@ -62,6 +62,10 @@ var cfg struct {
     Fillrecord            bool
     Maxerror              int64
     Delimiter             string
+    JsonPath              string
+    TimeFormat            string
+    Gzip                  bool
+    TruncateColumns       bool
   }
 }
 
@@ -149,6 +153,14 @@ func parseConfigfile() {
   if err != nil { reportError("Couldn't parse config: ", err) }
   cfg.Redshift.Delimiter, err = config.GetString("redshift", "delimiter")
   if err != nil { reportError("Couldn't parse config: ", err) }
+  cfg.Redshift.JsonPath, err = config.GetString("redshift", "json_path")
+  if err != nil { reportError("Couldn't parse config: ", err) }
+  cfg.Redshift.TimeFormat, err = config.GetString("redshift", "time_format")
+  if err != nil { reportError("Couldn't parse config: ", err) }
+  cfg.Redshift.Gzip, err = config.GetBool("redshift", "gzip")
+  if err != nil { reportError("Couldn't parse config: ", err) }
+  cfg.Redshift.TruncateColumns, err = config.GetBool("redshift", "truncate_columns")
+  if err != nil { reportError("Couldn't parse config: ", err) }
 }
 
 func defaultCopyStmt(currentTable *string, currentBucket *string, currentPrefix *string) string {
@@ -168,8 +180,12 @@ func defaultCopyStmt(currentTable *string, currentBucket *string, currentPrefix 
   if cfg.Redshift.Emptyasnull { buffer.WriteString(" emptyasnull") }
   if cfg.Redshift.Blanksasnull { buffer.WriteString(" blanksasnull") }
   if cfg.Redshift.Fillrecord { buffer.WriteString(" fillrecord") }
+  if cfg.Redshift.Gzip { buffer.WriteString(" gzip") }
+  if cfg.Redshift.TruncateColumns { buffer.WriteString(" truncatecolumns") }
   if cfg.Redshift.Maxerror > 0 { buffer.WriteString(" maxerror "); buffer.WriteString(fmt.Sprintf("%d", cfg.Redshift.Maxerror)) }
   if len(cfg.Redshift.Delimiter) > 0 { buffer.WriteString(" delimiter "); buffer.WriteString(fmt.Sprintf("'%s'", cfg.Redshift.Delimiter)) }
+  if len(cfg.Redshift.JsonPath) > 0 { buffer.WriteString(" json "); buffer.WriteString(fmt.Sprintf("'%s'", cfg.Redshift.JsonPath)) }
+  if len(cfg.Redshift.TimeFormat) > 0 { buffer.WriteString(" timeformat "); buffer.WriteString(fmt.Sprintf("'%s'", cfg.Redshift.TimeFormat)) }
 
   buffer.WriteString(";")
   return buffer.String()
