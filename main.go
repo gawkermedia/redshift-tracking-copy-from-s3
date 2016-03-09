@@ -19,9 +19,9 @@ import (
   configfile "github.com/crowdmob/goconfig"
   _ "github.com/bmizerany/pq"
   "database/sql"
-  "github.com/crowdmob/goamz/aws"
-  "github.com/crowdmob/goamz/s3"
-  "github.com/crowdmob/goamz/exp/sns"
+  "github.com/AdRoll/goamz/aws"
+  "github.com/AdRoll/goamz/s3"
+  "github.com/AdRoll/goamz/sns"
 )
 
 const (
