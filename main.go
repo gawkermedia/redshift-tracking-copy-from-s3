@@ -76,8 +76,9 @@ func init() {
 
 func reportError(desc string, err error) { // print to stderr and sns notify if required
   if cfg.Sns.FailureNotifications && len(cfg.Sns.Topic) > 0 && len(cfg.Aws.Accesskey) > 0 && len(cfg.Aws.Secretkey) > 0 {
-	  _, snsErr := sns.New(aws.Auth{cfg.Aws.Accesskey, cfg.Aws.Secretkey, "", time.Time}, aws.Regions[cfg.Aws.Region]).Publish(&sns.PublishOptions{fmt.Sprintf("%s: %#v", desc, err), "", "[redshift-tracking-copy-from-s3] ERROR Notification", cfg.Sns.Topic})
+	  newSns, snsErr := sns.New(*aws.NewAuth(cfg.Aws.Accesskey, cfg.Aws.Secretkey, "", time.Now()), aws.Regions[cfg.Aws.Region])
     if snsErr != nil { log.Println(fmt.Sprintf("SNS error: %#v during report of error writing to kafka: %#v", snsErr, err)) }
+	  newSns.Publish(&sns.PublishOptions{fmt.Sprintf("%s: %#v", desc, err), "", "[redshift-tracking-copy-from-s3] ERROR Notification", cfg.Sns.Topic, ""})
   }
   fmt.Printf("%s: %s\n", desc, err)
   panic(err)
@@ -360,7 +361,7 @@ func main() {
         
         // ----------------------------- If yes: diff STL_FILE_SCAN with S3 bucket files list, COPY and missing files into this Table -----------------------------
           if cfg.Default.Debug { fmt.Printf("Records found, have to do manual copies from now on.\n") }
-		s3bucket := s3.New(aws.NewAuth{cfg.Aws.Accesskey, cfg.Aws.Secretkey, "", time.Time}, aws.Regions[cfg.Aws.Region]).Bucket(currentBucket)
+		s3bucket := s3.New(*aws.NewAuth(cfg.Aws.Accesskey, cfg.Aws.Secretkey, "", time.Now()), aws.Regions[cfg.Aws.Region]).Bucket(currentBucket)
         
           // list all missing files and copy in the ones that are missing
           nonLoadedFiles := []string{}
