@@ -78,7 +78,7 @@ func reportError(desc string, err error) { // print to stderr and sns notify if 
   if cfg.Sns.FailureNotifications && len(cfg.Sns.Topic) > 0 && len(cfg.Aws.Accesskey) > 0 && len(cfg.Aws.Secretkey) > 0 {
 	  newSns, snsErr := sns.New(*aws.NewAuth(cfg.Aws.Accesskey, cfg.Aws.Secretkey, "", time.Now()), aws.Regions[cfg.Aws.Region])
     if snsErr != nil { log.Println(fmt.Sprintf("SNS error: %#v during report of error writing to kafka: %#v", snsErr, err)) }
-	  newSns.Publish(&sns.PublishOptions{fmt.Sprintf("%s: %#v", desc, err), "", "[redshift-tracking-copy-from-s3] ERROR Notification", cfg.Sns.Topic, ""})
+    newSns.Publish(&sns.PublishOptions{fmt.Sprintf("%s: %#v", desc, err), "", "[redshift-tracking-copy-from-s3] ERROR Notification", cfg.Sns.Topic, ""})
   }
   fmt.Printf("%s: %s\n", desc, err)
   panic(err)
