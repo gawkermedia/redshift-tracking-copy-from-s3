@@ -21,3 +21,6 @@ _cgo_export.*
 _testmain.go
 
 *.exe
+
+gocode/
+s3-to-redshift

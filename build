@@ -1,0 +1,9 @@
+#!/bin/bash
+
+set -e
+
+export GOPATH="$PWD/gocode"
+export GOBIN=$GOPATH/bin
+
+/usr/bin/go get .
+/usr/bin/go build -o "$PWD/s3-to-redshift" "$PWD/main.go"

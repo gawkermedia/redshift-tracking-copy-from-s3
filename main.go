@@ -11,8 +11,6 @@ import (
   "os"
   "time"
   "strings"
-  "net/http"
-  "io/ioutil"
   "bytes"
   "os/signal"
   simplejson "github.com/bitly/go-simplejson"
@@ -50,8 +48,6 @@ var cfg struct {
   }
   Redshift struct {
     Tables                []string
-    Migrate               bool
-    SchemaJsonUrl         string
     Host                  string
     Port                  int64
     Database              string
@@ -61,7 +57,6 @@ var cfg struct {
     Blanksasnull          bool
     Fillrecord            bool
     Maxerror              int64
-    Delimiter             string
     JsonPath              string
     TimeFormat            string
     Gzip                  bool
@@ -130,10 +125,6 @@ func parseConfigfile() {
   cfg.Redshift.Tables = make([]string, len(stringsArray))
   for i, _ := range stringsArray { cfg.Redshift.Tables[i] = strings.TrimSpace(stringsArray[i]) }
   
-  cfg.Redshift.Migrate, err = config.GetBool("redshift", "migrate")
-  if err != nil { reportError("Couldn't parse config: ", err) }
-  cfg.Redshift.SchemaJsonUrl, err = config.GetString("redshift", "schema_json_url")
-  if err != nil { reportError("Couldn't parse config: ", err) }
   cfg.Redshift.Host, err = config.GetString("redshift", "host")
   if err != nil { reportError("Couldn't parse config: ", err) }
   cfg.Redshift.Port, err = config.GetInt64("redshift", "port")
@@ -151,8 +142,6 @@ func parseConfigfile() {
   cfg.Redshift.Fillrecord, err = config.GetBool("redshift", "fillrecord")
   if err != nil { reportError("Couldn't parse config: ", err) }
   cfg.Redshift.Maxerror, err = config.GetInt64("redshift", "maxerror")
-  if err != nil { reportError("Couldn't parse config: ", err) }
-  cfg.Redshift.Delimiter, err = config.GetString("redshift", "delimiter")
   if err != nil { reportError("Couldn't parse config: ", err) }
   cfg.Redshift.JsonPath, err = config.GetString("redshift", "json_path")
   if err != nil { reportError("Couldn't parse config: ", err) }
@@ -184,7 +173,6 @@ func defaultCopyStmt(currentTable *string, currentBucket *string, currentPrefix 
   if cfg.Redshift.Gzip { buffer.WriteString(" gzip") }
   if cfg.Redshift.TruncateColumns { buffer.WriteString(" truncatecolumns") }
   if cfg.Redshift.Maxerror > 0 { buffer.WriteString(" maxerror "); buffer.WriteString(fmt.Sprintf("%d", cfg.Redshift.Maxerror)) }
-  if len(cfg.Redshift.Delimiter) > 0 { buffer.WriteString(" delimiter "); buffer.WriteString(fmt.Sprintf("'%s'", cfg.Redshift.Delimiter)) }
   if len(cfg.Redshift.JsonPath) > 0 { buffer.WriteString(" json "); buffer.WriteString(fmt.Sprintf("'%s'", cfg.Redshift.JsonPath)) }
   if len(cfg.Redshift.TimeFormat) > 0 { buffer.WriteString(" timeformat "); buffer.WriteString(fmt.Sprintf("'%s'", cfg.Redshift.TimeFormat)) }
 
@@ -260,17 +248,6 @@ func main() {
   // Read config file
   parseConfigfile()
   
-  // ----------------------------- Load schema json and check in redshift and migrate if needed ----------------------------- 
-  
-  response, err := http.Get(cfg.Redshift.SchemaJsonUrl)
-  if err != nil { reportError("Couldn't load schema url: ", err) }
-  defer response.Body.Close()
-  schemaContents, err := ioutil.ReadAll(response.Body)
-  if err != nil { reportError("Couldn't read response body from schema url: ", err) }
-  schemaJson, err := simplejson.NewJson(schemaContents)
-  if err != nil { reportError("Couldn't parse json from schema url: ", err) }
-  if cfg.Default.Debug { fmt.Printf("Read schema json:\n %#v\n", schemaJson) }
-  
   // ----------------------------- Startup goroutine for each Bucket/Prefix/Table & Repeat migration check per table ----------------------------- 
 
 
@@ -304,22 +281,7 @@ func main() {
       }
       
       if !anyRows {
-        tablesArry, err := schemaJson.Get("tables").Array()
-        if err != nil { reportError("Schema json error; expected tables element to be an array: ", err) }
-        tableIndex := -1
-        for i, _ := range tablesArry { 
-          if schemaJson.Get("tables").GetIndex(i).Get("name").MustString() == currentTable {
-            tableIndex = i
-            break
-          }
-        }
-        createTableStmt := createTableStatement(&currentTable, schemaJson.Get("tables").GetIndex(tableIndex).Get("columns"), schemaJson.Get("tables").GetIndex(tableIndex).Get("unique"), schemaJson.Get("tables").GetIndex(tableIndex).Get("primary_key"))
-        if cfg.Default.Debug {
-          fmt.Println("Creating table with:")
-          fmt.Println(createTableStmt)
-        }
-        _, err = db.Exec(createTableStmt)
-        if err != nil { reportError("Unable to create table: ", err) }
+        reportError("Table had no columns: ", err)
       } else {
         if cfg.Default.Debug { fmt.Println("Table found, will not migrate") }
       }
@@ -347,7 +309,7 @@ func main() {
           err = rows.Scan(&userid, &query, &slice, &name, &lines, &bytes, &loadtime, &curtime)
           if err != nil { reportError("Couldn't scan row for STL_FILE_SCAN: ", err) }
           if cfg.Default.Debug { fmt.Printf("  Already loaded: %d|%d|%d|%s|%d|%d|%d|%s\n", userid, query, slice, name, lines, bytes, loadtime, curtime) }
-          loadedFiles[strings.TrimSpace(name)] = true
+		loadedFiles[strings.TrimPrefix(strings.TrimSpace(name), fmt.Sprintf("s3://%s/", currentBucket))] = true
           anyRows = true
         }
         
@@ -375,7 +337,7 @@ func main() {
             if len(results.Contents) == 0 { break } // empty request, assume we found every file
             for _, s3obj := range results.Contents {
               if cfg.Default.Debug { fmt.Printf("Checking whether or not %s was preloaded.\n", strings.TrimSpace(s3obj.Key)) }
-              if !loadedFiles[strings.TrimSpace(s3obj.Key)] {
+		    if !loadedFiles[strings.TrimSpace(s3obj.Key)] {
                 nonLoadedFiles = append(nonLoadedFiles, s3obj.Key)
               }
             }
